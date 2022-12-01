@@ -15,5 +15,15 @@ namespace TextAnalysisFunct
         public string Url { get; set; }
         public string Method { get; set; }
         public string JsonBody { get; set; }
+        public int ChunkSize { get; set; }
+        public string[] Splitors { get; set; }
+    }
+
+    public class ChunkParam
+    { 
+        public ChunkParam() { }
+        public string LongText { get; set; }
+        public int ChunkSize { get; set; }
+        public string[] Splitors { get; set; }
     }
 }

@@ -9,6 +9,7 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -29,7 +30,14 @@ namespace TextAnalysisFunct
             dynamic dynVal = JsonConvert.DeserializeObject<dynamic>(rawJson);
             string longText = (string) dynVal["analysisInput"]["documents"][0]["text"];
 
-            List<string> outputs = await context.CallActivityAsync<List<string>>("TextAnalysis_ChunkActivity", longText);
+            ChunkParam chunkParam = new ChunkParam()
+            { 
+                ChunkSize = param.ChunkSize,
+                LongText = longText,
+                Splitors = param.Splitors
+            };
+
+            List<string> outputs = await context.CallActivityAsync<List<string>>("TextAnalysis_ChunkActivity", chunkParam);
             HashSet<string> finalOutputs = new HashSet<string>();
 
             if (param.Method.ToLower() == "languagedetection")
@@ -48,15 +56,15 @@ namespace TextAnalysisFunct
         }
 
         [FunctionName("TextAnalysis_ChunkActivity")]
-        public static List<string> Chunk([ActivityTrigger] string longText, ILogger log)
+        public static List<string> Chunk([ActivityTrigger] ChunkParam chunkParam, ILogger log)
         {
             // default chunk by line feed, you can add extra through config
-            string[] paras = longText.Split(new string[] { "\r\n", "\r", "\n" }, System.StringSplitOptions.RemoveEmptyEntries);
+            string[] paras = chunkParam.LongText.Split(chunkParam.Splitors, System.StringSplitOptions.RemoveEmptyEntries);
             List<string> chunkText = new List<string>();
             StringBuilder sb = new StringBuilder();
             foreach (string para in paras) 
             {
-                if (sb.Length + para.Length > 5000)
+                if (sb.Length + para.Length > chunkParam.ChunkSize)
                 {
                     chunkText.Add(sb.ToString().Trim());
                     sb = new StringBuilder();
@@ -87,13 +95,8 @@ namespace TextAnalysisFunct
             HttpResponseMessage response = _httpClient.Send(msg);
             string resp = await response.Content.ReadAsStringAsync();
             dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
-            JArray langs = respObj["results"]["documents"];
-            List<string> anaOutputs = new List<string>();
-            foreach (JObject doc in langs)
-            {
-                string lang = (string)doc["detectedLanguage"]["name"];
-                anaOutputs.Add(lang);
-            }
+            string lang = respObj["results"]["documents"][0]["detectedLanguage"]["name"];
+            List<string> anaOutputs = new List<string>{ lang };
             return anaOutputs;
         }
 
@@ -125,6 +128,20 @@ namespace TextAnalysisFunct
             string url = req.Headers["Ocp-Apim-Subscription-Url"];
             string methog = req.Headers["Ocp-Apim-Subscription-Method"];
             string json = string.Empty;
+            int chunkSize = 5000;
+            string[] splitors = new string[] { "\r\n", "\r", "\n" };
+
+            if (req.Headers.ContainsKey("Ocp-Apim-Subscription-Chunk-Size"))
+            {
+                chunkSize = int.TryParse(req.Headers["Ocp-Apim-Subscription-Chunk-Size"], out chunkSize) ? chunkSize : 5000;
+            }
+
+            if (req.Headers.ContainsKey("Ocp-Apim-Subscription-Splitors"))
+            {
+                string extraSplitorRaw = req.Headers["Ocp-Apim-Subscription-Splitors"];
+                string[] extraSplitors = extraSplitorRaw.Split(';', StringSplitOptions.RemoveEmptyEntries);
+                splitors = splitors.Union(extraSplitors).ToArray();
+            }
 
             using (MemoryStream ms = new MemoryStream())
             {
@@ -138,7 +155,9 @@ namespace TextAnalysisFunct
                 Key = key,
                 Region = region,
                 Method = methog,
-                Url = url
+                Url = url,
+                ChunkSize = chunkSize,
+                Splitors = splitors
             };
 
             // Function input comes from the request content.
