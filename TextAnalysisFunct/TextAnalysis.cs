@@ -26,6 +26,14 @@ namespace TextAnalysisFunct
             [OrchestrationTrigger] IDurableOrchestrationContext context)
         {
             DurableParam param = context.GetInput<DurableParam>();
+            context.SetCustomStatus(new
+            {
+                prevAction = "Get durable parameter",
+                nextAction = "Generate text chunks",
+                status = "OK",
+                isRunning = true
+            });
+
             string rawJson = param.JsonBody;
             dynamic dynVal = JsonConvert.DeserializeObject<dynamic>(rawJson);
             string longText = (string) dynVal["analysisInput"]["documents"][0]["text"];
@@ -40,6 +48,14 @@ namespace TextAnalysisFunct
             List<string> outputs = await context.CallActivityAsync<List<string>>("TextAnalysis_ChunkActivity", chunkParam);
             HashSet<string> finalOutputs = new HashSet<string>();
 
+            context.SetCustomStatus(new
+            {
+                prevAction = "Generate text chunks",
+                nextAction = "Run text analysis",
+                status = "OK",
+                isRunning = true
+            });
+
             if (param.Method.ToLower() == "languagedetection")
             {
                 foreach (string chunk in outputs)
@@ -51,6 +67,13 @@ namespace TextAnalysisFunct
                     finalOutputs.UnionWith(analysisOutputs);
                 }
             }
+
+            context.SetCustomStatus(new
+            {
+                prevAction = "Run text analysis",
+                status = "OK",
+                isRunning = false
+            });
 
             return finalOutputs;
         }
@@ -96,7 +119,9 @@ namespace TextAnalysisFunct
             string resp = await response.Content.ReadAsStringAsync();
             dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
             string lang = respObj["results"]["documents"][0]["detectedLanguage"]["name"];
-            List<string> anaOutputs = new List<string>{ lang };
+            string code = respObj["results"]["documents"][0]["detectedLanguage"]["iso6391Name"];
+            List<string> anaOutputs = new List<string>();
+            anaOutputs.Add($"{code}:{lang}");
             return anaOutputs;
         }
 
@@ -139,7 +164,7 @@ namespace TextAnalysisFunct
             if (req.Headers.ContainsKey("Ocp-Apim-Subscription-Splitors"))
             {
                 string extraSplitorRaw = req.Headers["Ocp-Apim-Subscription-Splitors"];
-                string[] extraSplitors = extraSplitorRaw.Split(';', StringSplitOptions.RemoveEmptyEntries);
+                string[] extraSplitors = extraSplitorRaw.Split(',', StringSplitOptions.RemoveEmptyEntries);
                 splitors = splitors.Union(extraSplitors).ToArray();
             }
 
