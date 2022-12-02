@@ -13,17 +13,27 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace TextAnalysisFunct
 {
+    /// <summary>
+    /// 
+    /// </summary>
     public static class TextAnalysis
     {
         private static HttpClient _httpClient = new HttpClient();
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="context"></param>
+        /// <returns></returns>
         [FunctionName("TextAnalysis_Orchestrator")]
         public static async Task<HashSet<string>> RunOrchestrator(
-            [OrchestrationTrigger] IDurableOrchestrationContext context)
+            [OrchestrationTrigger] IDurableOrchestrationContext context,
+            ILogger log)
         {
             DurableParam param = context.GetInput<DurableParam>();
             context.SetCustomStatus(new
@@ -67,6 +77,75 @@ namespace TextAnalysisFunct
                     finalOutputs.UnionWith(analysisOutputs);
                 }
             }
+            else if (param.Method.ToLower() == "keyphraseextraction")
+            {
+                foreach (string chunk in outputs)
+                {
+                    dynVal["analysisInput"]["documents"][0]["text"] = chunk;
+                    string chunkJson = JsonConvert.SerializeObject(dynVal);
+                    param.JsonBody = chunkJson;
+                    List<string> analysisOutputs = await context.CallActivityAsync<List<string>>("TextAnalysis_KeyPhraseExtractionActivity", param);
+                    finalOutputs.UnionWith(analysisOutputs);
+                }
+            }
+            else if (param.Method.ToLower() == "entityrecognition")
+            {
+                foreach (string chunk in outputs)
+                {
+                    dynVal["analysisInput"]["documents"][0]["text"] = chunk;
+                    string chunkJson = JsonConvert.SerializeObject(dynVal);
+                    param.JsonBody = chunkJson;
+                    List<string> analysisOutputs = await context.CallActivityAsync<List<string>>("TextAnalysis_EntityRecognitionActivity", param);
+                    finalOutputs.UnionWith(analysisOutputs);
+                }
+            }
+            else if (param.Method.ToLower() == "piientityrecognition")
+            {
+                StringBuilder sb = new StringBuilder();
+                foreach (string chunk in outputs)
+                {
+                    dynVal["analysisInput"]["documents"][0]["text"] = chunk;
+                    string chunkJson = JsonConvert.SerializeObject(dynVal);
+                    param.JsonBody = chunkJson;
+                    PiiReturnParam analysisOutputs = await context.CallActivityAsync<PiiReturnParam>("TextAnalysis_PiiEntityRecognitionActivity", param);
+                    finalOutputs.UnionWith(analysisOutputs.RedactedEntities);
+                    sb.Append(analysisOutputs.RedactedText);
+                }
+                finalOutputs.Add($"RedactedText:{sb.ToString()}");
+            }
+            else if (param.Method.ToLower() == "ExtractiveSummarization") // param.Method.ToLower() == "AbstractiveSummarization" 
+            {
+                while (true)
+                {
+                    if (outputs.Count == 1)
+                    {
+                        string chunk = outputs[0];
+                        dynVal["analysisInput"]["documents"][0]["text"] = chunk;
+                        string chunkJson = JsonConvert.SerializeObject(dynVal);
+                        param.JsonBody = chunkJson;
+                        string analysisOutputs = await context.CallActivityAsync<string>("TextAnalysis_ExtractiveSummarizationActivity", param);
+                        finalOutputs.Add($"Summarization:{analysisOutputs}");
+                        break;
+                    }
+                    else
+                    {
+                        StringBuilder sb = new StringBuilder();
+                        foreach (string chunk in outputs)
+                        {
+                            dynVal["analysisInput"]["documents"][0]["text"] = chunk;
+                            string chunkJson = JsonConvert.SerializeObject(dynVal);
+                            param.JsonBody = chunkJson;
+                            string analysisOutputs = await context.CallActivityAsync<string>("TextAnalysis_ExtractiveSummarizationActivity", param);
+                            sb.Append(analysisOutputs);
+                        }
+                        longText = sb.ToString();
+                        chunkParam.LongText = longText;
+                        outputs = await context.CallActivityAsync<List<string>>("TextAnalysis_ChunkActivity", chunkParam);
+                    }
+                }
+
+                return finalOutputs;
+            }
 
             context.SetCustomStatus(new
             {
@@ -78,6 +157,12 @@ namespace TextAnalysisFunct
             return finalOutputs;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="chunkParam"></param>
+        /// <param name="log"></param>
+        /// <returns></returns>
         [FunctionName("TextAnalysis_ChunkActivity")]
         public static List<string> Chunk([ActivityTrigger] ChunkParam chunkParam, ILogger log)
         {
@@ -102,6 +187,12 @@ namespace TextAnalysisFunct
             return chunkText;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="param"></param>
+        /// <param name="log"></param>
+        /// <returns></returns>
         [FunctionName("TextAnalysis_LanguageDetectionActivity")]
         public static async Task<List<string>> LanguageDetection([ActivityTrigger] DurableParam param, ILogger log)
         {
@@ -125,6 +216,163 @@ namespace TextAnalysisFunct
             return anaOutputs;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="param"></param>
+        /// <param name="log"></param>
+        /// <returns></returns>
+        [FunctionName("TextAnalysis_KeyPhraseExtractionActivity")]
+        public static async Task<List<string>> KeyPhraseExtraction([ActivityTrigger] DurableParam param, ILogger log)
+        {
+            HttpRequestMessage msg = new HttpRequestMessage();
+            msg.Method = HttpMethod.Post;
+            msg.RequestUri = new Uri(param.Url);
+            msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+            //msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
+
+            StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            msg.Content = content;
+
+            HttpResponseMessage response = _httpClient.Send(msg);
+            string resp = await response.Content.ReadAsStringAsync();
+            dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+
+            JArray parases = respObj["results"]["documents"][0]["keyPhrases"];
+            List<string> anaOutputs = new List<string>();
+            foreach (JToken phrase in parases)
+            {
+                anaOutputs.Add((string)phrase);
+            }
+            return anaOutputs;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="param"></param>
+        /// <param name="log"></param>
+        /// <returns></returns>
+        [FunctionName("TextAnalysis_EntityRecognitionActivity")]
+        public static async Task<List<string>> EntityRecognition([ActivityTrigger] DurableParam param, ILogger log)
+        {
+            HttpRequestMessage msg = new HttpRequestMessage();
+            msg.Method = HttpMethod.Post;
+            msg.RequestUri = new Uri(param.Url);
+            msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+            //msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
+
+            StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            msg.Content = content;
+
+            HttpResponseMessage response = _httpClient.Send(msg);
+            string resp = await response.Content.ReadAsStringAsync();
+            dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+
+            JArray entities = respObj["results"]["documents"][0]["entities"];
+            List<string> anaOutputs = new List<string>();
+            foreach (JToken entity in entities)
+            {
+                anaOutputs.Add((string)entity["category"] + ":" + (string)entity["text"]);
+            }
+            return anaOutputs;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="param"></param>
+        /// <param name="log"></param>
+        /// <returns></returns>
+        [FunctionName("TextAnalysis_PiiEntityRecognitionActivity")]
+        public static async Task<PiiReturnParam> PiiEntityRecognition([ActivityTrigger] DurableParam param, ILogger log)
+        {
+            HttpRequestMessage msg = new HttpRequestMessage();
+            msg.Method = HttpMethod.Post;
+            msg.RequestUri = new Uri(param.Url);
+            msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+            //msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
+
+            StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            msg.Content = content;
+
+            HttpResponseMessage response = _httpClient.Send(msg);
+            string resp = await response.Content.ReadAsStringAsync();
+            dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+
+            PiiReturnParam piiParam = new PiiReturnParam();
+            JObject doc1 = respObj["results"]["documents"][0];
+            piiParam.RedactedText = (string) doc1["redactedText"];
+            List<string> anaOutputs = new List<string>();
+            foreach (JObject entity in ((JArray)doc1["entities"]))
+            {
+                anaOutputs.Add((string)entity["category"] + ":" + (string)entity["text"]);
+            }
+            piiParam.RedactedEntities = anaOutputs;
+            // log.LogInformation($"Redacted Text\n{piiParam.RedactedText}");
+            return piiParam;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="param"></param>
+        /// <param name="log"></param>
+        /// <returns></returns>
+        [FunctionName("TextAnalysis_ExtractiveSummarizationActivity")]
+        public static async Task<string> ExtractiveSummarization([ActivityTrigger] DurableParam param, ILogger log)
+        {
+            HttpRequestMessage msg = new HttpRequestMessage();
+            msg.Method = HttpMethod.Post;
+            msg.RequestUri = new Uri(param.Url);
+            msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+            //msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
+
+            StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            msg.Content = content;
+
+            HttpResponseMessage response = _httpClient.Send(msg);
+            string location = response.Headers.GetValues("Operation-Location").FirstOrDefault();
+            
+            msg = new HttpRequestMessage();
+            msg.Method = HttpMethod.Get;
+            msg.RequestUri = new Uri(location);
+            msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+
+            HttpResponseMessage response2 = _httpClient.Send(msg);
+            string resp = await response2.Content.ReadAsStringAsync();
+            dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+            string processStatus = respObj["status"];
+
+            while (processStatus == "running" || processStatus == "notStarted")
+            {
+                Thread.Sleep(TimeSpan.FromSeconds(10));
+                response2 = _httpClient.Send(msg);
+                resp = await response2.Content.ReadAsStringAsync();
+                respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+                processStatus = respObj["status"];
+            }
+
+            JArray sents = respObj["tasks"]["items"][0]["results"]["documents"][0]["sentences"];
+            StringBuilder sb = new StringBuilder();
+            foreach (JObject sent in sents)
+            {
+                sb.Append($"{sent["text"]}{Environment.NewLine}");
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="req"></param>
+        /// <param name="starter"></param>
+        /// <param name="log"></param>
+        /// <returns></returns>
         [FunctionName("TextAnalysis_HttpStart")]
         public static async Task<IActionResult> HttpStart(
             [HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequest req,

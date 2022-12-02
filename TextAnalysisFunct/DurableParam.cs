@@ -69,4 +69,26 @@ namespace TextAnalysisFunct
         /// </summary>
         public string[] Splitors { get; set; }
     }
-}
+
+    /// <summary>
+    /// 
+    /// </summary>
+    public class PiiReturnParam
+    {
+        /// <summary>
+        /// 
+        /// </summary>
+        public PiiReturnParam()
+        { 
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        public string RedactedText { get; set; }
+        /// <summary>
+        /// 
+        /// </summary>
+        public List<string> RedactedEntities { get; set; }
+    }
+ }
