@@ -49,7 +49,9 @@ namespace TextAnalysisFunct
 
             string rawJson = param.JsonBody;
             dynamic dynVal = JsonConvert.DeserializeObject<dynamic>(rawJson);
-            string longText = (string) dynVal["analysisInput"]["documents"][0]["text"];
+            string longText = param.Method.ToLower() != "translation" ?
+                (string)dynVal["analysisInput"]["documents"][0]["text"] :
+                (string)((JArray)dynVal)[0]["Text"];
 
             ChunkParam chunkParam = new ChunkParam()
             { 
@@ -57,6 +59,11 @@ namespace TextAnalysisFunct
                 LongText = longText,
                 Splitors = param.Splitors
             };
+
+            if (param.Method.ToLower() == "translation")
+            {
+                chunkParam.ChunkSize = 50000;
+            }
 
             List<string> outputs = await context.CallActivityAsync<List<string>>("TextAnalysis_ChunkActivity", chunkParam);
             HashSet<string> finalOutputs = new HashSet<string>();
@@ -157,7 +164,27 @@ namespace TextAnalysisFunct
                         outputs = await context.CallActivityAsync<List<string>>("TextAnalysis_ChunkActivity", summaryChunkParam);
                     }
                 }
-                return finalOutputs;
+            }
+            else if (param.Method.ToLower() == "translation")
+            {
+                StringBuilder sb = new StringBuilder();
+                foreach (string chunk in outputs)
+                {
+                    ((JArray)dynVal)[0]["Text"] = chunk;
+                    string chunkJson = JsonConvert.SerializeObject(dynVal);
+                    log.LogInformation($"Json for Translation\n{chunkJson}");
+                    param.JsonBody = chunkJson;
+                    string analysisOutputs = await context.CallActivityAsync<string>("TextAnalysis_TranslationActivity", param);
+                    if (sb.Length == 0)
+                    {
+                        sb.Append(analysisOutputs);
+                    }
+                    else
+                    {
+                        sb.Append($"{Environment.NewLine}{analysisOutputs}");
+                    }
+                }
+                finalOutputs.Add($"TranslatedText:{sb.ToString()}");
             }
 
             context.SetCustomStatus(new
@@ -382,6 +409,34 @@ namespace TextAnalysisFunct
                 sb.Append($"{sent["text"]}{Environment.NewLine}");
             }
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// Translation Service
+        /// </summary>
+        /// <param name="param"></param>
+        /// <param name="log"></param>
+        /// <returns></returns>
+        [FunctionName("TextAnalysis_TranslationActivity")]
+        public static async Task<string> Translation([ActivityTrigger] DurableParam param, ILogger log)
+        {
+            HttpRequestMessage msg = new HttpRequestMessage();
+            msg.Method = HttpMethod.Post;
+            msg.RequestUri = new Uri(param.Url);
+            msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+            msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
+
+            log.LogInformation($"Json for Translation\n{param.JsonBody}");
+            StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            msg.Content = content;
+
+            HttpResponseMessage response = _httpClient.Send(msg);
+            string resp = await response.Content.ReadAsStringAsync();
+            log.LogInformation($"Translation Service Return\n{resp}");
+            dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+            string outputText = (string)respObj[0]["translations"][0]["text"];
+            return outputText;
         }
 
         /// <summary>
