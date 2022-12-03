@@ -1,16 +1,16 @@
 # TextAnalysisFunct
 ## A Simple Azure Durable Function Wrapper for Azure Text Analysis
-For Azure Cognitive Services for Text Analysis, there is a limitation for 5,120 characters.  With this restriction, Text Analysis Services are hardly useful for anything longer than a couple page.  This wrapper based on Azure Durable Function, essentially, gets rid of this obstacle by converting Text Analysis into an async service.
+For Azure Cognitive Text Analysis services, there is a limitation for 5,120 characters.  With this restriction, Text Analysis Services are hardly useful for anything longer than a couple pages.  This wrapper based on Azure Durable Function, essentially, gets rid of this obstacle by converting Text Analysis into async services.
 ## Description of Technical Approach
 At the core of the Azure Durable Function, 
-1. long text is chopped into chunks by parapragh or splitors you selected
+1. a long text is chopped into chunks by parapragh(s) and splitors you selected
 2. chunks are sent to Azure Text Analysis Services for processing piece by piece (the code is tested on a very limited Azure resource, so all calls are sequential, if your resources allow, you can easily rewrite this into a fan-out and fan-in parallel model)
-3. results from each chunk are combined into a final result 
+3. results from each chunk are combined / merged into a final result 
 ## Setup
 In order to set this up
 1. download the source codes
 2. complie into binary with VS2022
-3. publish into Azure funcion wuth .Net6
+3. publish into Azure funcion with .Net6 stack
 ## Usage
 To create a test application
 1. init a http client
@@ -45,6 +45,7 @@ To create a test application
 4. point to Azure Function entry point
 5. query Azure Status Uri
 6. when complete, read results
+### Sample Codes 
 ## Services Supported
 At the moment, the following services are supported
 - Language detect
@@ -53,4 +54,3 @@ At the moment, the following services are supported
 - PII redaction
 - Summarization (extractive / substractive)
 - Translation (coming soon)
-## Sample Test Codes
