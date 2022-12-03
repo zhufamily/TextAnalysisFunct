@@ -19,14 +19,17 @@ using System.Threading.Tasks;
 namespace TextAnalysisFunct
 {
     /// <summary>
-    /// 
+    /// Text Analysis Wrapper for Azure Cognitive Services
     /// </summary>
     public static class TextAnalysis
     {
+        /// <summary>
+        /// Singleton Http Client Instance
+        /// </summary>
         private static HttpClient _httpClient = new HttpClient();
 
         /// <summary>
-        /// 
+        /// Orchestrator for Durable Function
         /// </summary>
         /// <param name="context"></param>
         /// <returns></returns>
@@ -113,7 +116,7 @@ namespace TextAnalysisFunct
                 }
                 finalOutputs.Add($"RedactedText:{sb.ToString()}");
             }
-            else if (param.Method.ToLower() == "extractivesummarization") // param.Method.ToLower() == "AbstractiveSummarization" 
+            else if (param.Method.ToLower() == "extractivesummarization" || param.Method.ToLower() == "abstractivesummarization")
             {
                 while (true)
                 {
@@ -128,7 +131,7 @@ namespace TextAnalysisFunct
                         dynVal["analysisInput"]["documents"][0]["text"] = chunk;
                         string chunkJson = JsonConvert.SerializeObject(dynVal);
                         param.JsonBody = chunkJson;
-                        string analysisOutputs = await context.CallActivityAsync<string>("TextAnalysis_ExtractiveSummarizationActivity", param);
+                        string analysisOutputs = await context.CallActivityAsync<string>("TextAnalysis_SummarizationActivity", param);
                         log.LogInformation($"Final summary\n{analysisOutputs}");
                         finalOutputs.Add($"Summarization:{analysisOutputs}");
                         break;
@@ -168,7 +171,7 @@ namespace TextAnalysisFunct
         }
 
         /// <summary>
-        /// 
+        /// Chunk -- break long text into chunks
         /// </summary>
         /// <param name="chunkParam"></param>
         /// <param name="log"></param>
@@ -198,7 +201,7 @@ namespace TextAnalysisFunct
         }
 
         /// <summary>
-        /// 
+        /// Language Detection Service
         /// </summary>
         /// <param name="param"></param>
         /// <param name="log"></param>
@@ -227,7 +230,7 @@ namespace TextAnalysisFunct
         }
 
         /// <summary>
-        /// 
+        /// Key Phrase Extraction Service
         /// </summary>
         /// <param name="param"></param>
         /// <param name="log"></param>
@@ -259,7 +262,7 @@ namespace TextAnalysisFunct
         }
 
         /// <summary>
-        /// 
+        /// Entity EXtraction Service
         /// </summary>
         /// <param name="param"></param>
         /// <param name="log"></param>
@@ -291,7 +294,7 @@ namespace TextAnalysisFunct
         }
 
         /// <summary>
-        /// 
+        /// PII Recognition Service
         /// </summary>
         /// <param name="param"></param>
         /// <param name="log"></param>
@@ -327,13 +330,13 @@ namespace TextAnalysisFunct
         }
 
         /// <summary>
-        /// 
+        /// Summarization Service
         /// </summary>
         /// <param name="param"></param>
         /// <param name="log"></param>
         /// <returns></returns>
-        [FunctionName("TextAnalysis_ExtractiveSummarizationActivity")]
-        public static async Task<string> ExtractiveSummarization([ActivityTrigger] DurableParam param, ILogger log)
+        [FunctionName("TextAnalysis_SummarizationActivity")]
+        public static async Task<string> Summarization([ActivityTrigger] DurableParam param, ILogger log)
         {
             HttpRequestMessage msg = new HttpRequestMessage();
             msg.Method = HttpMethod.Post;
@@ -382,7 +385,7 @@ namespace TextAnalysisFunct
         }
 
         /// <summary>
-        /// 
+        /// Http Entry Point for Text Services
         /// </summary>
         /// <param name="req"></param>
         /// <param name="starter"></param>
@@ -394,6 +397,7 @@ namespace TextAnalysisFunct
             [DurableClient] IDurableOrchestrationClient starter,
             ILogger log)
         {
+            // process all headers
             if (!req.Headers.ContainsKey("Ocp-Apim-Subscription-Key"))
             {
                 return new BadRequestObjectResult("Header Ocp-Apim-Subscription-Key is missing");
@@ -424,6 +428,11 @@ namespace TextAnalysisFunct
                 chunkSize = int.TryParse(req.Headers["Ocp-Apim-Subscription-Chunk-Size"], out chunkSize) ? chunkSize : 5000;
             }
 
+            if (chunkSize > 5000 || chunkSize < 500)
+            {
+                return new BadRequestObjectResult("Ocp-Apim-Subscription-Chunk-Size must an integer between 500 and 5000 inclusive");
+            }
+
             if (req.Headers.ContainsKey("Ocp-Apim-Subscription-Splitors"))
             {
                 string extraSplitorRaw = req.Headers["Ocp-Apim-Subscription-Splitors"];
@@ -431,12 +440,14 @@ namespace TextAnalysisFunct
                 splitors = splitors.Union(extraSplitors).ToArray();
             }
 
+            // copy body 
             using (MemoryStream ms = new MemoryStream())
             {
                 req.Body.CopyTo(ms);
                 json = Encoding.UTF8.GetString(ms.ToArray());
             }
 
+            // compose durable parameter
             DurableParam param = new DurableParam()
             {
                 JsonBody = json,

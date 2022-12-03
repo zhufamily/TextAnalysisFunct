@@ -71,23 +71,23 @@ namespace TextAnalysisFunct
     }
 
     /// <summary>
-    /// 
+    /// PII Retrun Parameter
     /// </summary>
     public class PiiReturnParam
     {
         /// <summary>
-        /// 
+        /// Public constructor
         /// </summary>
         public PiiReturnParam()
         { 
         }
 
         /// <summary>
-        /// 
+        /// PII Redacted Text
         /// </summary>
         public string RedactedText { get; set; }
         /// <summary>
-        /// 
+        /// PII Entities
         /// </summary>
         public List<string> RedactedEntities { get; set; }
     }
