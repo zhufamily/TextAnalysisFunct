@@ -117,6 +117,79 @@ namespace Tester
     }
 }
 ```
+Another sample for translation service
+```
+
+using System.Net.Http.Headers;
+using System.Text;
+using System;
+using System.Text.Json.Serialization;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+namespace Tester
+{
+    internal class Program
+    {
+        static HttpClient _httpClient = new HttpClient();
+        static void Main(string[] args)
+        {
+            string longtxt = File.ReadAllText("somelongtextfile.txt");
+            
+            
+            HttpRequestMessage msg = new HttpRequestMessage();
+            msg.Method = HttpMethod.Post;
+            msg.RequestUri = new Uri("https://yourazuredureablefunction.azurewebsites.net/api/TextAnalysis_HttpStart?code=yourfunctionaccesscode");
+            msg.Headers.Add("Ocp-Apim-Subscription-Key", "yourkeyfromcognitiveservices");
+            msg.Headers.Add("Ocp-Apim-Subscription-Region", "yourresourceregion");
+            msg.Headers.Add("Ocp-Apim-Subscription-Url", "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&to=en");
+            msg.Headers.Add("Ocp-Apim-Subscription-Method", "Translation");
+            
+            object data = new object[] 
+            { 
+                new { Text = "L’augmentation des taux d’intérêt viendra rattraper « une forte proportion » de ceux qui ont contracté des prêts hypothécaires à taux variable, prévient la Banque du Canada. Y compris ceux qui se croyaient à l’abri parce qu’ils avaient choisi l’option des versements fixes"}
+            };
+
+            StringContent content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            msg.Content = content;
+
+            HttpResponseMessage response = _httpClient.Send(msg);
+            string resp = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            dynamic durableDyn = JsonConvert.DeserializeObject<dynamic>(resp);
+
+            string statusUrl = durableDyn["statusQueryGetUri"];
+
+            HttpRequestMessage statusMsg = new HttpRequestMessage();
+            statusMsg.Method = HttpMethod.Get;
+            statusMsg.RequestUri = new Uri(statusUrl);
+
+            HttpResponseMessage statusResponse = _httpClient.Send(statusMsg);
+            string statusResp = statusResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            dynamic statusDyn = JsonConvert.DeserializeObject<dynamic>(statusResp);
+
+            while (statusDyn["runtimeStatus"] != "Completed")
+            { 
+                Thread.Sleep(TimeSpan.FromSeconds(10));
+
+                statusMsg = new HttpRequestMessage();
+                statusMsg.Method = HttpMethod.Get;
+                statusMsg.RequestUri = new Uri(statusUrl);
+
+                statusResponse = _httpClient.Send(statusMsg);
+                statusResp = statusResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                statusDyn = JsonConvert.DeserializeObject<dynamic>(statusResp);
+            }
+
+            JArray outputs = statusDyn["output"];
+            foreach (JValue output in outputs)
+            { 
+                Console.WriteLine(output.ToString());
+            }
+        }
+    }
+}
+```
 ## Services Supported
 At the moment, the following services are supported
 - Language detect
