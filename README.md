@@ -147,7 +147,7 @@ namespace Tester
             
             object data = new object[] 
             { 
-                new { Text = "L’augmentation des taux d’intérêt viendra rattraper « une forte proportion » de ceux qui ont contracté des prêts hypothécaires à taux variable, prévient la Banque du Canada. Y compris ceux qui se croyaient à l’abri parce qu’ils avaient choisi l’option des versements fixes"}
+                new { Text = longtxt }
             };
 
             StringContent content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
