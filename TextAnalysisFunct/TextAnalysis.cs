@@ -151,7 +151,7 @@ namespace TextAnalysisFunct
                             dynVal["analysisInput"]["documents"][0]["text"] = chunk;
                             string chunkJson = JsonConvert.SerializeObject(dynVal);
                             param.JsonBody = chunkJson;
-                            string analysisOutputs = await context.CallActivityAsync<string>("TextAnalysis_ExtractiveSummarizationActivity", param);
+                            string analysisOutputs = await context.CallActivityAsync<string>("TextAnalysis_SummarizationActivity", param);
                             sb.Append(analysisOutputs);
                         }
                         log.LogInformation($"Temp summary\n{sb.ToString()}");
