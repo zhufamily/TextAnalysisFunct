@@ -15,12 +15,12 @@ In order to set this up
 To create a test console application
 1. init a http client
 2. add headers 
- - Ocp-Apim-Subscription-Key (required)
- - Ocp-Apim-Subscription-Region (required)
- - Ocp-Apim-Subscription-Url (required)
- - Ocp-Apim-Subscription-Method (required)
- - Ocp-Apim-Subscription-Chunk-Size (optional - default: 5,000)
- - Ocp-Apim-Subscription-Splitors (optional - character return and line feed are always there)
+    - Ocp-Apim-Subscription-Key (required)
+    - Ocp-Apim-Subscription-Region (required)
+    - Ocp-Apim-Subscription-Url (required)
+    - Ocp-Apim-Subscription-Method (required)
+    - Ocp-Apim-Subscription-Chunk-Size (optional - default: 5,000)
+    - Ocp-Apim-Subscription-Splitors (optional - character return and line feed are always there)
 3. hash out a json body with a long string variable
 4. point to Azure Durable Function entry point
 5. constantly query Azure Status Uri
