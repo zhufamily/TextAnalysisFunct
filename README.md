@@ -22,30 +22,98 @@ To create a test application
  - Ocp-Apim-Subscription-Chunk-Size (optional - default: 5,000)
  - Ocp-Apim-Subscription-Splitors (optional - character return and line feed are always there)
 3. hash out a json body with long text
-```
-{
-    "displayName": "Document Abs Summarization Task Example",
-    "analysisInput": {
-		"documents": [
-			{
-				"id": 1,
-				"text": "something very long"
-			}
-		]
-	},
-    "tasks":[{
-        "kind": "ExtractiveSummarization",
-        "parameters": {
-            "sentenceCount": 3
-        },
-        "taskName": "Document Abs Summarization Task"
-    }]
-}
-```
 4. point to Azure Function entry point
 5. query Azure Status Uri
 6. when complete, read results
-### Sample Codes 
+### Sample Test Codes 
+The following test codes are getting extractive summariztion from a long text file.  Based my test, aroung 15K characters take about one minute to fihish.
+If you want to detect text for multiple langauges, you might want to specify a smaller chunk size; due to the fact that one chunk can only return one major language, e.g. English is 51% and Japanense is 49%, the service will only return one value for English.
+If your test has some chunk issues with paragraph only, e.g. 5,000 characters without \r\n, you might want to specify extra delimitors.  Based on HTTP Header protocol, if multiple delimitors are defined, please separate them by ",", e.g. "!,?,.". 
+```
+using System.Net.Http.Headers;
+using System.Text;
+using System;
+using System.Text.Json.Serialization;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+namespace Tester
+{
+    internal class Program
+    {
+        static HttpClient _httpClient = new HttpClient();
+        static void Main(string[] args)
+        {
+            string longtxt = File.ReadAllText("somelongtextfile.txt");
+            
+            
+            HttpRequestMessage msg = new HttpRequestMessage();
+            msg.Method = HttpMethod.Post;
+            msg.RequestUri = new Uri("https://yourazuredureablefunction.azurewebsites.net/api/TextAnalysis_HttpStart?code=yourfunctionaccesscode");
+            msg.Headers.Add("Ocp-Apim-Subscription-Key", "yourkeyfromcognitiveservices");
+            msg.Headers.Add("Ocp-Apim-Subscription-Region", "yourresourceregion");
+            msg.Headers.Add("Ocp-Apim-Subscription-Url", "https://eastus2.api.cognitive.microsoft.com/language/analyze-text/jobs?api-version=2022-10-01-preview");
+            msg.Headers.Add("Ocp-Apim-Subscription-Method", "ExtractiveSummarization");
+            msg.Headers.Add("Ocp-Apim-Subscription-Chunk-Size", "3000");
+
+            object data = new
+            {
+                displayName = "Document Summarization Task Example",
+                analysisInput = new
+                {
+                    documents = new[] { new { id = 1, language = "en", text = longtxt } }
+                },
+                tasks = new[]
+                {
+                    new
+                    {
+                        kind = "ExtractiveSummarization",
+                        taskName = "Document Summarization Task",
+                        parameters = new { sentenceCount = 3 }
+                    }
+                }
+            };
+
+            StringContent content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            msg.Content = content;
+
+            HttpResponseMessage response = _httpClient.Send(msg);
+            string resp = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            dynamic durableDyn = JsonConvert.DeserializeObject<dynamic>(resp);
+
+            string statusUrl = durableDyn["statusQueryGetUri"];
+
+            HttpRequestMessage statusMsg = new HttpRequestMessage();
+            statusMsg.Method = HttpMethod.Get;
+            statusMsg.RequestUri = new Uri(statusUrl);
+
+            HttpResponseMessage statusResponse = _httpClient.Send(statusMsg);
+            string statusResp = statusResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            dynamic statusDyn = JsonConvert.DeserializeObject<dynamic>(statusResp);
+
+            while (statusDyn["runtimeStatus"] != "Completed")
+            { 
+                Thread.Sleep(TimeSpan.FromSeconds(10));
+
+                statusMsg = new HttpRequestMessage();
+                statusMsg.Method = HttpMethod.Get;
+                statusMsg.RequestUri = new Uri(statusUrl);
+
+                statusResponse = _httpClient.Send(statusMsg);
+                statusResp = statusResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                statusDyn = JsonConvert.DeserializeObject<dynamic>(statusResp);
+            }
+
+            JArray outputs = statusDyn["output"];
+            foreach (JValue output in outputs)
+            { 
+                Console.WriteLine(output.ToString());
+            }
+        }
+    }
+}
+```
 ## Services Supported
 At the moment, the following services are supported
 - Language detect
