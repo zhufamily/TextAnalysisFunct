@@ -124,4 +124,6 @@ At the moment, the following services are supported
 - Entity extraction
 - PII redaction
 - Summarization (extractive / substractive)
-- Translation (coming soon)
+- Translation
+## License
+Free software, absoltely no warranty, use at your own risk!
