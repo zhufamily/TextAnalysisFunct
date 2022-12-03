@@ -113,11 +113,16 @@ namespace TextAnalysisFunct
                 }
                 finalOutputs.Add($"RedactedText:{sb.ToString()}");
             }
-            else if (param.Method.ToLower() == "ExtractiveSummarization") // param.Method.ToLower() == "AbstractiveSummarization" 
+            else if (param.Method.ToLower() == "extractivesummarization") // param.Method.ToLower() == "AbstractiveSummarization" 
             {
                 while (true)
                 {
-                    if (outputs.Count == 1)
+                    log.LogInformation($"Chunk count: {outputs.Count}");
+                    if (outputs.Count == 0)
+                    {
+                        break;
+                    }
+                    else if (outputs.Count == 1)
                     {
                         string chunk = outputs[0];
                         dynVal["analysisInput"]["documents"][0]["text"] = chunk;
@@ -138,12 +143,16 @@ namespace TextAnalysisFunct
                             string analysisOutputs = await context.CallActivityAsync<string>("TextAnalysis_ExtractiveSummarizationActivity", param);
                             sb.Append(analysisOutputs);
                         }
-                        longText = sb.ToString();
-                        chunkParam.LongText = longText;
-                        outputs = await context.CallActivityAsync<List<string>>("TextAnalysis_ChunkActivity", chunkParam);
+                        log.LogInformation($"Summary text\n{sb.ToString()}");
+                        ChunkParam summaryChunkParam = new ChunkParam()
+                        {
+                            ChunkSize = param.ChunkSize,
+                            LongText = sb.ToString(),
+                            Splitors = param.Splitors
+                        };
+                        outputs = await context.CallActivityAsync<List<string>>("TextAnalysis_ChunkActivity", summaryChunkParam);
                     }
                 }
-
                 return finalOutputs;
             }
 
@@ -351,6 +360,11 @@ namespace TextAnalysisFunct
             while (processStatus == "running" || processStatus == "notStarted")
             {
                 Thread.Sleep(TimeSpan.FromSeconds(10));
+                msg = new HttpRequestMessage();
+                msg.Method = HttpMethod.Get;
+                msg.RequestUri = new Uri(location);
+                msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+
                 response2 = _httpClient.Send(msg);
                 resp = await response2.Content.ReadAsStringAsync();
                 respObj = JsonConvert.DeserializeObject<dynamic>(resp);
