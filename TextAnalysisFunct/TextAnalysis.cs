@@ -129,6 +129,7 @@ namespace TextAnalysisFunct
                         string chunkJson = JsonConvert.SerializeObject(dynVal);
                         param.JsonBody = chunkJson;
                         string analysisOutputs = await context.CallActivityAsync<string>("TextAnalysis_ExtractiveSummarizationActivity", param);
+                        log.LogInformation($"Final summary\n{analysisOutputs}");
                         finalOutputs.Add($"Summarization:{analysisOutputs}");
                         break;
                     }
@@ -143,7 +144,7 @@ namespace TextAnalysisFunct
                             string analysisOutputs = await context.CallActivityAsync<string>("TextAnalysis_ExtractiveSummarizationActivity", param);
                             sb.Append(analysisOutputs);
                         }
-                        log.LogInformation($"Summary text\n{sb.ToString()}");
+                        log.LogInformation($"Temp summary\n{sb.ToString()}");
                         ChunkParam summaryChunkParam = new ChunkParam()
                         {
                             ChunkSize = param.ChunkSize,
