@@ -387,11 +387,11 @@ namespace TextAnalysisFunct
             HttpResponseMessage response2 = _httpClient.Send(msg);
             string resp = await response2.Content.ReadAsStringAsync();
             dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
-            string processStatus = respObj["status"];
-
+            string processStatus = (string) respObj["status"];
+            
             while (processStatus == "running" || processStatus == "notStarted")
             {
-                Thread.Sleep(TimeSpan.FromSeconds(10));
+                Thread.Sleep(TimeSpan.FromMilliseconds(1000));
                 msg = new HttpRequestMessage();
                 msg.Method = HttpMethod.Get;
                 msg.RequestUri = new Uri(location);
@@ -400,7 +400,7 @@ namespace TextAnalysisFunct
                 response2 = _httpClient.Send(msg);
                 resp = await response2.Content.ReadAsStringAsync();
                 respObj = JsonConvert.DeserializeObject<dynamic>(resp);
-                processStatus = respObj["status"];
+                processStatus = (string) respObj["status"];
             }
 
             JArray sents = respObj["tasks"]["items"][0]["results"]["documents"][0]["sentences"];
