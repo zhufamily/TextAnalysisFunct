@@ -38,6 +38,7 @@ namespace TextAnalysisFunct
             [OrchestrationTrigger] IDurableOrchestrationContext context,
             ILogger log)
         {
+            log = context.CreateReplaySafeLogger(log);
             DurableParam param = context.GetInput<DurableParam>();
             context.SetCustomStatus(new
             {
