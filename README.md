@@ -198,5 +198,6 @@ At the moment, the following services are supported
 - PII redaction
 - Summarization (extractive / substractive)
 - Translation
+- Entity Linking
 ## License
 Free software, absoltely no warranty, use at your own risk!
