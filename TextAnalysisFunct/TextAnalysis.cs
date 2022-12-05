@@ -124,6 +124,17 @@ namespace TextAnalysisFunct
                 }
                 finalOutputs.Add($"RedactedText:{sb.ToString()}");
             }
+            else if (param.Method.ToLower() == "entitylinking")
+            {
+                foreach (string chunk in outputs)
+                {
+                    dynVal["analysisInput"]["documents"][0]["text"] = chunk;
+                    string chunkJson = JsonConvert.SerializeObject(dynVal);
+                    param.JsonBody = chunkJson;
+                    List<string> analysisOutputs = await context.CallActivityAsync<List<string>>("TextAnalysis_EntityLinkingActivity", param);
+                    finalOutputs.UnionWith(analysisOutputs);
+                }
+            }
             else if (param.Method.ToLower() == "extractivesummarization" || param.Method.ToLower() == "abstractivesummarization")
             {
                 while (true)
@@ -317,6 +328,35 @@ namespace TextAnalysisFunct
             foreach (JToken entity in entities)
             {
                 anaOutputs.Add((string)entity["category"] + ":" + (string)entity["text"]);
+            }
+            return anaOutputs;
+        }
+
+        [FunctionName("TextAnalysis_EntityLinkingActivity")]
+        public static async Task<List<string>> EntityLinking([ActivityTrigger] DurableParam param, ILogger log)
+        {
+            HttpRequestMessage msg = new HttpRequestMessage();
+            msg.Method = HttpMethod.Post;
+            msg.RequestUri = new Uri(param.Url);
+            msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+            //msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
+
+            // log.LogInformation($"JSON Body\n{param.JsonBody}");
+
+            StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            msg.Content = content;
+
+            HttpResponseMessage response = _httpClient.Send(msg);
+            string resp = await response.Content.ReadAsStringAsync();
+            // log.LogInformation($"Entity Linking Resp\n{resp}");
+            dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+
+            JArray entities = respObj["results"]["documents"][0]["entities"];
+            List<string> anaOutputs = new List<string>();
+            foreach (JToken entity in entities)
+            {
+                anaOutputs.Add((string)entity["name"] + ":" + (string)entity["dataSource"] + ":" + (string)entity["url"]);
             }
             return anaOutputs;
         }
