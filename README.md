@@ -1,6 +1,7 @@
 # Azure Durable Function for Text Analysis
 ## A Simple Azure Durable Function Wrapper for Azure Text Analysis
-For [Azure Cognitive Text Analysis services](https://azure.microsoft.com/en-us/products/cognitive-services/text-analytics/#overview), there is a limitation for 5,120 characters.  With this restriction, Text Analysis Services are hardly useful for anything longer than a couple of pages.  This wrapper, based on Azure Durable Function, gets rid of this obstacle by converting Text Analysis into async services.
+For [Azure Cognitive Text Analysis services](https://azure.microsoft.com/en-us/products/cognitive-services/text-analytics/#overview), there is a limitation for 5,120 characters.  With this restriction, Text Analysis Services are hardly useful for anything longer than a couple of pages.  This wrapper, based on Azure Durable Function, gets rid of this obstacle by converting Text Analysis into async services.\
+For the 2022-10-01-preview version, Cognitive Service supports async operations for a limit of 125,000 characters; I am still exploring that option, will spend some time to shift our call to async version when it becomes GA.  In that case, we can have far fewer transactions, therefore it will be way lower in cost!
 ## Description of Technical Approach
 At the core of the Azure Durable Function, 
 1. a piece of long text is chopped into multiple small chunks by parapragh(s) and delimitors you selected
