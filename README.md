@@ -194,12 +194,12 @@ namespace Tester
 ```
 ## Services Supported
 At the moment, the following services are supported
-- Language detect
-- Key phrase extraction
-- Entity extraction
-- PII redaction
-- Summarization (extractive / substractive)
-- Translation
-- Entity Linking
+- Language detect, sync only
+- Key phrase extraction, sync only
+- Entity extraction, sync only
+- PII redaction, sync only
+- Summarization (extractive / substractive), async only
+- Translation, sync only
+- Entity Linking, both sync and async
 ## License
 Free software, absoltely no warranty, use at your own risk!
