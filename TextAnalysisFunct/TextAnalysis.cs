@@ -1,3 +1,4 @@
+using Azure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
@@ -10,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -38,8 +40,12 @@ namespace TextAnalysisFunct
             [OrchestrationTrigger] IDurableOrchestrationContext context,
             ILogger log)
         {
+            // safe logger for Orchetrator
             log = context.CreateReplaySafeLogger(log);
+
+            // read input parameter
             DurableParam param = context.GetInput<DurableParam>();
+            
             context.SetCustomStatus(new
             {
                 prevAction = "Get durable parameter",
@@ -48,6 +54,7 @@ namespace TextAnalysisFunct
                 isRunning = true
             });
 
+            // extract long text
             string rawJson = param.JsonBody;
             dynamic dynVal = JsonConvert.DeserializeObject<dynamic>(rawJson);
             string longText = param.Method.ToLower() != "translation" ?
@@ -137,6 +144,11 @@ namespace TextAnalysisFunct
             }
             else if (param.Method.ToLower() == "extractivesummarization" || param.Method.ToLower() == "abstractivesummarization")
             {
+                if (!param.IsAsync)
+                {
+                    throw new ArgumentException($"Summarization only supports in async mode");
+                }
+
                 while (true)
                 {
                     log.LogInformation($"Chunk count: {outputs.Count}");
@@ -332,33 +344,90 @@ namespace TextAnalysisFunct
             return anaOutputs;
         }
 
+        /// <summary>
+        /// Entity Linking Service
+        /// </summary>
+        /// <param name="param"></param>
+        /// <param name="log"></param>
+        /// <returns></returns>
         [FunctionName("TextAnalysis_EntityLinkingActivity")]
         public static async Task<List<string>> EntityLinking([ActivityTrigger] DurableParam param, ILogger log)
         {
-            HttpRequestMessage msg = new HttpRequestMessage();
-            msg.Method = HttpMethod.Post;
-            msg.RequestUri = new Uri(param.Url);
-            msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
-            //msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
-
-            // log.LogInformation($"JSON Body\n{param.JsonBody}");
-
-            StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
-            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-            msg.Content = content;
-
-            HttpResponseMessage response = _httpClient.Send(msg);
-            string resp = await response.Content.ReadAsStringAsync();
-            // log.LogInformation($"Entity Linking Resp\n{resp}");
-            dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
-
-            JArray entities = respObj["results"]["documents"][0]["entities"];
-            List<string> anaOutputs = new List<string>();
-            foreach (JToken entity in entities)
+            if (param.IsAsync)
             {
-                anaOutputs.Add((string)entity["name"] + ":" + (string)entity["dataSource"] + ":" + (string)entity["url"]);
+                HttpRequestMessage msg = new HttpRequestMessage();
+                msg.Method = HttpMethod.Post;
+                msg.RequestUri = new Uri(param.Url);
+                msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+                //msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
+
+                // log.LogInformation($"JSON Body\n{param.JsonBody}");
+
+                StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
+                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                msg.Content = content;                
+                HttpResponseMessage response = _httpClient.Send(msg);
+                string location = response.Headers.GetValues("Operation-Location").FirstOrDefault();
+
+                msg = new HttpRequestMessage();
+                msg.Method = HttpMethod.Get;
+                msg.RequestUri = new Uri(location);
+                msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+
+                HttpResponseMessage response2 = _httpClient.Send(msg);
+                string resp = await response2.Content.ReadAsStringAsync();
+                dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+                string processStatus = (string)respObj["status"];
+                
+                while (processStatus == "running" || processStatus == "notStarted")
+                {
+                    Thread.Sleep(TimeSpan.FromMilliseconds(1000));
+                    msg = new HttpRequestMessage();
+                    msg.Method = HttpMethod.Get;
+                    msg.RequestUri = new Uri(location);
+                    msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+
+                    response2 = _httpClient.Send(msg);
+                    resp = await response2.Content.ReadAsStringAsync();
+                    respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+                    processStatus = (string)respObj["status"];
+                }
+
+                JArray entities = respObj["tasks"]["items"][0]["results"]["documents"][0]["entities"];
+                List<string> anaOutputs = new List<string>();
+                foreach (JToken entity in entities)
+                {
+                    anaOutputs.Add((string)entity["name"] + ":" + (string)entity["dataSource"] + ":" + (string)entity["url"]);
+                }
+                return anaOutputs;
             }
-            return anaOutputs;
+            else
+            {
+                HttpRequestMessage msg = new HttpRequestMessage();
+                msg.Method = HttpMethod.Post;
+                msg.RequestUri = new Uri(param.Url);
+                msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+                //msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
+
+                // log.LogInformation($"JSON Body\n{param.JsonBody}");
+
+                StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
+                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                msg.Content = content;
+
+                HttpResponseMessage response = _httpClient.Send(msg);
+                string resp = await response.Content.ReadAsStringAsync();
+                // log.LogInformation($"Entity Linking Resp\n{resp}");
+                dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+
+                JArray entities = respObj["results"]["documents"][0]["entities"];
+                List<string> anaOutputs = new List<string>();
+                foreach (JToken entity in entities)
+                {
+                    anaOutputs.Add((string)entity["name"] + ":" + (string)entity["dataSource"] + ":" + (string)entity["url"]);
+                }
+                return anaOutputs;
+            }
         }
 
         /// <summary>
@@ -516,17 +585,30 @@ namespace TextAnalysisFunct
             string url = req.Headers["Ocp-Apim-Subscription-Url"];
             string methog = req.Headers["Ocp-Apim-Subscription-Method"];
             string json = string.Empty;
-            int chunkSize = 5000;
+            bool isAsync = false;
             string[] splitors = new string[] { "\r\n", "\r", "\n" };
+
+            if (req.Headers.ContainsKey("Ocp-Apim-Subscription-Is-Async"))
+            {
+                string headAsync = req.Headers["Ocp-Apim-Subscription-Is-Async"];
+                isAsync = headAsync.Trim().ToLower() == "true" || headAsync.Trim().ToLower() == "1" ? true : false;
+            }
+
+            int chunkSize = isAsync ? 120000 : 5000;
 
             if (req.Headers.ContainsKey("Ocp-Apim-Subscription-Chunk-Size"))
             {
                 chunkSize = int.TryParse(req.Headers["Ocp-Apim-Subscription-Chunk-Size"], out chunkSize) ? chunkSize : 5000;
             }
 
-            if (chunkSize > 5000 || chunkSize < 500)
+            if (!isAsync && (chunkSize > 5000 || chunkSize < 500))
             {
-                return new BadRequestObjectResult("Ocp-Apim-Subscription-Chunk-Size must an integer between 500 and 5000 inclusive");
+                return new BadRequestObjectResult("When running sync mode Ocp-Apim-Subscription-Chunk-Size must an integer between 500 and 5000 inclusive");
+            }
+
+            if (isAsync && (chunkSize > 120000 || chunkSize < 5000))
+            {
+                return new BadRequestObjectResult("When running async mode Ocp-Apim-Subscription-Chunk-Size must an integer between 5000 and 120000 inclusive");
             }
 
             if (req.Headers.ContainsKey("Ocp-Apim-Subscription-Splitors"))
@@ -552,7 +634,8 @@ namespace TextAnalysisFunct
                 Method = methog,
                 Url = url,
                 ChunkSize = chunkSize,
-                Splitors = splitors
+                Splitors = splitors,
+                IsAsync= isAsync
             };
 
             // Function input comes from the request content.

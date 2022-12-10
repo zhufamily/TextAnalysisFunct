@@ -44,6 +44,10 @@ namespace TextAnalysisFunct
         /// Splitors -- paragraph by default
         /// </summary>
         public string[] Splitors { get; set; }
+        /// <summary>
+        /// Is Async Operation
+        /// </summary>
+        public bool IsAsync { get; set; } = false;
     }
 
     /// <summary>
