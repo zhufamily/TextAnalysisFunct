@@ -1,6 +1,7 @@
 # Azure Durable Function for Text Analysis
 ## A Simple Azure Durable Function Wrapper for Azure Text Analysis
-For [Azure Cognitive Text Analysis services](https://azure.microsoft.com/en-us/products/cognitive-services/text-analytics/#overview), there is a limitation for 5,120 characters.  With this restriction, Text Analysis Services are hardly useful for anything longer than a couple of pages.  This wrapper, based on Azure Durable Function, gets rid of this obstacle by converting Text Analysis into async services.
+For [Azure Cognitive Text Analysis services](https://azure.microsoft.com/en-us/products/cognitive-services/text-analytics/#overview), there is a limitation for 5,120 characters.  With this restriction, Text Analysis Services are hardly useful for anything longer than a couple of pages.  This wrapper, based on Azure Durable Function, gets rid of this obstacle by converting Text Analysis into async services.\
+For the 2022-10-01-preview version, Cognitive Service supports async operations for a limit of 125,000 characters; I am still exploring that option, will spend some time to shift our call to async version when it becomes GA.  In that case, we can have far fewer transactions, therefore it will be way lower in cost!
 ## Description of Technical Approach
 At the core of the Azure Durable Function, 
 1. a piece of long text is chopped into multiple small chunks by parapragh(s) and delimitors you selected
@@ -31,6 +32,7 @@ Based my test, aroung 15K characters take about one minute to fihish.\
 If you want to detect multiple langauges, you might want to specify a smaller chunk size; due to the fact that one chunk can only return one major language, e.g. English is 51% and Japanense is 49%, the service will only return one value for English.\
 If your test has some chunking issues with paragraph only, e.g. 5,000 characters without \r\n, you might want to specify extra delimitors.  Based on HTTP Header protocol, if multiple delimitors are defined, please separate them by ",", e.g. "!,?,.".\
 As of writing, the Substrative Summarization is still a gated preview, so you will need submit [a request form](https://aka.ms/applyforgatedsummarizationfeatures) for access.\
+The Extractive Summarization seems only work in 2022-10-01-preview version with async operation.\
 When translation service is invoke, the chunk size will set up to 50K characters by system, your custom delimitors are still applied.
 ```
 using System.Net.Http.Headers;
