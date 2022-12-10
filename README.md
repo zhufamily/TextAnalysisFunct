@@ -27,12 +27,8 @@ To create a test console application
 5. constantly query Azure Status Uri
 6. when complete, read results
 ### Sample Test Codes 
-The following test codes are getting extractive summariztion from a long text file.\
-Based my test, aroung 15K characters take about one minute to fihish.\
 If you want to detect multiple langauges, you might want to specify a smaller chunk size; due to the fact that one chunk can only return one major language, e.g. English is 51% and Japanense is 49%, the service will only return one value for English.\
 If your test has some chunking issues with paragraph only, e.g. 5,000 characters without \r\n, you might want to specify extra delimitors.  Based on HTTP Header protocol, if multiple delimitors are defined, please separate them by ",", e.g. "!,?,.".\
-As of writing, the Substrative Summarization is still a gated preview, so you will need submit [a request form](https://aka.ms/applyforgatedsummarizationfeatures) for access.\
-The Extractive Summarization seems only work in 2022-10-01-preview version with async operation.\
 When translation service is invoke, the chunk size will set up to 50K characters by system, your custom delimitors are still applied.
 ```
 using System.Net.Http.Headers;
@@ -119,7 +115,11 @@ namespace Tester
     }
 }
 ```
-Another sample for translation service
+Another sample for translation service with async operation.\
+The following test codes are getting extractive summariztion from a long text file.\
+Based my test, aroung 15K characters take about one minute to fihish. Compared with other services, Summarization is particular show, for example, Entity Linking can finish 750K charcaters in around 40 seconds.
+As of writing, the Substrative Summarization is still a gated preview, so you will need submit [a request form](https://aka.ms/applyforgatedsummarizationfeatures) for access.\
+The Extractive Summarization seems only work in 2022-10-01-preview version with async operation.\
 ```
 
 using System.Net.Http.Headers;
