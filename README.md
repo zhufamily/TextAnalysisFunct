@@ -30,7 +30,7 @@ To create a test console application
 ### Sample Test Codes 
 If you want to detect multiple langauges, you might want to specify a smaller chunk size; due to the fact that one chunk can only return one major language, e.g. English is 51% and Japanense is 49%, the service will only return one value for English.\
 If your test has some chunking issues with paragraph only, e.g. 5,000 characters without \r\n, you might want to specify extra delimitors.  Based on HTTP Header protocol, if multiple delimitors are defined, please separate them by ",", e.g. "!,?,.".\
-When translation service is invoke, the chunk size will set up to 50K characters by system, your custom delimitors are still applied.
+When translation service or is translation service for language detection is invoked, the chunk size will set up to 50K characters by system, your custom delimitors are still applied.
 ```
 using System.Net.Http.Headers;
 using System.Text;
@@ -207,6 +207,77 @@ namespace Tester
     }
 }
 ```
+Finally, a sample code for Translation Language Detection service
+```
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System.Diagnostics;
+using System.Net.Http.Headers;
+using System.Text;
+
+namespace Tester
+{
+    internal class Program
+    {
+        static HttpClient _httpClient = new HttpClient();
+        static void Main(string[] args)
+        {
+            string longtxt = File.ReadAllText("news_text.txt");
+
+            HttpRequestMessage msg = new HttpRequestMessage();
+            msg.Method = HttpMethod.Post;
+            msg.RequestUri = new Uri("https://yourazuredureablefunction.azurewebsites.net/api/TextAnalysis_HttpStart?code=yourfunctionaccesscode");
+            msg.Headers.Add("Ocp-Apim-Subscription-Key", "yourkeyfromcognitiveservices");
+            msg.Headers.Add("Ocp-Apim-Subscription-Region", "yourresourceregion");
+            msg.Headers.Add("Ocp-Apim-Subscription-Url", "https://api.cognitive.microsofttranslator.com/detect?api-version=3.0");
+            msg.Headers.Add("Ocp-Apim-Subscription-Method", "TranslationForLanguageDetection");
+            
+            object[] data = new object[] { new { Text = longtxt } };
+
+            StringContent content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            msg.Content = content;
+
+            Stopwatch sw = new Stopwatch();
+            sw.Start();
+            HttpResponseMessage response = _httpClient.Send(msg);
+            string resp = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            dynamic durableDyn = JsonConvert.DeserializeObject<dynamic>(resp);
+
+            string statusUrl = durableDyn["statusQueryGetUri"];
+
+            HttpRequestMessage statusMsg = new HttpRequestMessage();
+            statusMsg.Method = HttpMethod.Get;
+            statusMsg.RequestUri = new Uri(statusUrl);
+
+            HttpResponseMessage statusResponse = _httpClient.Send(statusMsg);
+            string statusResp = statusResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            dynamic statusDyn = JsonConvert.DeserializeObject<dynamic>(statusResp);
+
+            while (statusDyn["runtimeStatus"] != "Completed")
+            {
+                Thread.Sleep(TimeSpan.FromMilliseconds(1000));
+
+                statusMsg = new HttpRequestMessage();
+                statusMsg.Method = HttpMethod.Get;
+                statusMsg.RequestUri = new Uri(statusUrl);
+
+                statusResponse = _httpClient.Send(statusMsg);
+                statusResp = statusResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                statusDyn = JsonConvert.DeserializeObject<dynamic>(statusResp);
+            }
+
+            sw.Stop();
+            Console.WriteLine($"Time taken: {sw.ElapsedMilliseconds} Milliseconds");
+            JArray outputs = statusDyn["output"];
+            foreach (JValue output in outputs)
+            {
+                Console.WriteLine(output.ToString());
+            }
+        }
+    }
+}
+```
 ## Services Supported
 At the moment, the following services are supported
 | Service | Sync Operation | Async Operation |
@@ -216,7 +287,8 @@ At the moment, the following services are supported
 | Entity extraction | X | |
 | PII redaction | X | |
 | Summarization | | X |
-| Translation | X | |
 | Entity Linking | X | X |
+| Translation | X | |
+| Translation for Language Detection| X | |
 ## License
 Free software, absoltely no warranty, use at your own risk!
