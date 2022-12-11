@@ -30,7 +30,7 @@ To create a test console application
 ### Sample Test Codes 
 If you want to detect multiple langauges, you might want to specify a smaller chunk size; due to the fact that one chunk can only return one major language, e.g. English is 51% and Japanense is 49%, the service will only return one value for English.\
 If your test has some chunking issues with paragraph only, e.g. 5,000 characters without \r\n, you might want to specify extra delimitors.  Based on HTTP Header protocol, if multiple delimitors are defined, please separate them by ",", e.g. "!,?,.".\
-When translation service is invoke, the chunk size will set up to 50K characters by system, your custom delimitors are still applied.
+When translation service or is translation service for language detection is invoked, the chunk size will set up to 50K characters by system, your custom delimitors are still applied.
 ```
 using System.Net.Http.Headers;
 using System.Text;
