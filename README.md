@@ -216,8 +216,8 @@ At the moment, the following services are supported
 | Entity extraction | X | |
 | PII redaction | X | |
 | Summarization | | X |
+| Entity Linking | X | X |
 | Translation | X | |
 | Translation for Language Detection| X | |
-| Entity Linking | X | X |
 ## License
 Free software, absoltely no warranty, use at your own risk!
