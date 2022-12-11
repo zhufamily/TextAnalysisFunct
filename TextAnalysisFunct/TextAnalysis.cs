@@ -1,4 +1,3 @@
-using Azure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
@@ -11,7 +10,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -57,7 +55,7 @@ namespace TextAnalysisFunct
             // extract long text
             string rawJson = param.JsonBody;
             dynamic dynVal = JsonConvert.DeserializeObject<dynamic>(rawJson);
-            string longText = param.Method.ToLower() != "translation" ?
+            string longText = !param.Method.ToLower().StartsWith("translation") ?
                 (string)dynVal["analysisInput"]["documents"][0]["text"] :
                 (string)((JArray)dynVal)[0]["Text"];
 
@@ -68,7 +66,7 @@ namespace TextAnalysisFunct
                 Splitors = param.Splitors
             };
 
-            if (param.Method.ToLower() == "translation")
+            if (param.Method.ToLower().StartsWith("translation"))
             {
                 chunkParam.ChunkSize = 50000;
             }
@@ -86,6 +84,11 @@ namespace TextAnalysisFunct
 
             if (param.Method.ToLower() == "languagedetection")
             {
+                if (param.IsAsync)
+                {
+                    throw new ArgumentException($"Language detection only supports in sync mode");
+                }
+
                 foreach (string chunk in outputs)
                 {
                     dynVal["analysisInput"]["documents"][0]["text"] = chunk;
@@ -191,12 +194,17 @@ namespace TextAnalysisFunct
             }
             else if (param.Method.ToLower() == "translation")
             {
+                if (param.IsAsync)
+                {
+                    throw new ArgumentException($"Translation only supports in sync mode");
+                }
+
                 StringBuilder sb = new StringBuilder();
                 foreach (string chunk in outputs)
                 {
                     ((JArray)dynVal)[0]["Text"] = chunk;
                     string chunkJson = JsonConvert.SerializeObject(dynVal);
-                    log.LogInformation($"Json for Translation\n{chunkJson}");
+                    //log.LogInformation($"Json for Translation\n{chunkJson}");
                     param.JsonBody = chunkJson;
                     string analysisOutputs = await context.CallActivityAsync<string>("TextAnalysis_TranslationActivity", param);
                     if (sb.Length == 0)
@@ -209,6 +217,23 @@ namespace TextAnalysisFunct
                     }
                 }
                 finalOutputs.Add($"TranslatedText:{sb.ToString()}");
+            }
+            else if (param.Method.ToLower() == "translationforlanguagedetection")
+            {
+                if (param.IsAsync)
+                {
+                    throw new ArgumentException($"Translation for Language Detection only supports in sync mode");
+                }
+
+                foreach (string chunk in outputs)
+                {
+                    ((JArray)dynVal)[0]["Text"] = chunk;
+                    string chunkJson = JsonConvert.SerializeObject(dynVal);
+                    //log.LogInformation($"Json for Translation\n{chunkJson}");
+                    param.JsonBody = chunkJson;
+                    List<string> analysisOutputs = await context.CallActivityAsync<List<string>>("TextAnalysis_TranslationLanguageDetectionActivity", param);
+                    finalOutputs.UnionWith(analysisOutputs);
+                }
             }
 
             context.SetCustomStatus(new
@@ -247,7 +272,7 @@ namespace TextAnalysisFunct
             {
                 chunkText.Add(sb.ToString().Trim());
             }
-            log.LogInformation($"Get text into chunks.");
+            //log.LogInformation($"Get text into chunks.");
             return chunkText;
         }
 
@@ -272,6 +297,7 @@ namespace TextAnalysisFunct
 
             HttpResponseMessage response = _httpClient.Send(msg);
             string resp = await response.Content.ReadAsStringAsync();
+            //log.LogInformation($"Response:\n{resp}");
             dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
             string lang = respObj["results"]["documents"][0]["detectedLanguage"]["name"];
             string code = respObj["results"]["documents"][0]["detectedLanguage"]["iso6391Name"];
@@ -536,17 +562,50 @@ namespace TextAnalysisFunct
             msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
             msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
 
-            log.LogInformation($"Json for Translation\n{param.JsonBody}");
+            //log.LogInformation($"Json for Translation\n{param.JsonBody}");
             StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
             content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
             msg.Content = content;
 
             HttpResponseMessage response = _httpClient.Send(msg);
             string resp = await response.Content.ReadAsStringAsync();
-            log.LogInformation($"Translation Service Return\n{resp}");
+            //log.LogInformation($"Translation Service Return\n{resp}");
             dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
             string outputText = (string)respObj[0]["translations"][0]["text"];
             return outputText;
+        }
+
+        /// <summary>
+        /// Translation Service for Language Detection
+        /// </summary>
+        /// <param name="param"></param>
+        /// <param name="log"></param>
+        /// <returns></returns>
+        [FunctionName("TextAnalysis_TranslationLanguageDetectionActivity")]
+        public static async Task<List<string>> TranslationLanguageDetectionActivity([ActivityTrigger] DurableParam param, ILogger log)
+        {
+            HttpRequestMessage msg = new HttpRequestMessage();
+            msg.Method = HttpMethod.Post;
+            msg.RequestUri = new Uri(param.Url);
+            msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+            msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
+
+            //log.LogInformation($"Json for Translation\n{param.JsonBody}");
+            StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            msg.Content = content;
+
+            HttpResponseMessage response = _httpClient.Send(msg);
+            string resp = await response.Content.ReadAsStringAsync();
+            //log.LogInformation($"Translation Service Return\n{resp}");
+            dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+            
+            List<string> anaOutputs = new List<string>();
+            foreach (JObject lang in ((JArray)respObj))
+            {
+                anaOutputs.Add((string)lang["language"]);
+            }
+            return anaOutputs;
         }
 
         /// <summary>
