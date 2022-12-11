@@ -282,10 +282,10 @@ namespace Tester
 At the moment, the following services are supported, async operation is tested for 2022-10-01-preview version
 | Service | Sync Operation | Async Operation |
 | :- | :-: | :-: |
-| Language detect | X | |
-| Key phrase extraction | X | X |
-| Entity extraction | X | X |
-| PII redaction | X | X |
+| Language Detect | X | |
+| Key Phrase Extraction | X | X |
+| Entity Extraction | X | X |
+| PII Redaction | X | X |
 | Summarization | | X |
 | Entity Linking | X | X |
 | Translation | X | |
