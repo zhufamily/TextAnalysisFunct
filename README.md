@@ -207,6 +207,77 @@ namespace Tester
     }
 }
 ```
+Finally, a sample code for Translation Language Detection service
+```
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System.Diagnostics;
+using System.Net.Http.Headers;
+using System.Text;
+
+namespace Tester
+{
+    internal class Program
+    {
+        static HttpClient _httpClient = new HttpClient();
+        static void Main(string[] args)
+        {
+            string longtxt = File.ReadAllText("news_text.txt");
+
+            HttpRequestMessage msg = new HttpRequestMessage();
+            msg.Method = HttpMethod.Post;
+            msg.RequestUri = new Uri("https://yourazuredureablefunction.azurewebsites.net/api/TextAnalysis_HttpStart?code=yourfunctionaccesscode");
+            msg.Headers.Add("Ocp-Apim-Subscription-Key", "yourkeyfromcognitiveservices");
+            msg.Headers.Add("Ocp-Apim-Subscription-Region", "yourresourceregion");
+            msg.Headers.Add("Ocp-Apim-Subscription-Url", "https://api.cognitive.microsofttranslator.com/detect?api-version=3.0");
+            msg.Headers.Add("Ocp-Apim-Subscription-Method", "TranslationForLanguageDetection");
+            
+            object[] data = new object[] { new { Text = longtxt } };
+
+            StringContent content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            msg.Content = content;
+
+            Stopwatch sw = new Stopwatch();
+            sw.Start();
+            HttpResponseMessage response = _httpClient.Send(msg);
+            string resp = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            dynamic durableDyn = JsonConvert.DeserializeObject<dynamic>(resp);
+
+            string statusUrl = durableDyn["statusQueryGetUri"];
+
+            HttpRequestMessage statusMsg = new HttpRequestMessage();
+            statusMsg.Method = HttpMethod.Get;
+            statusMsg.RequestUri = new Uri(statusUrl);
+
+            HttpResponseMessage statusResponse = _httpClient.Send(statusMsg);
+            string statusResp = statusResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            dynamic statusDyn = JsonConvert.DeserializeObject<dynamic>(statusResp);
+
+            while (statusDyn["runtimeStatus"] != "Completed")
+            {
+                Thread.Sleep(TimeSpan.FromMilliseconds(1000));
+
+                statusMsg = new HttpRequestMessage();
+                statusMsg.Method = HttpMethod.Get;
+                statusMsg.RequestUri = new Uri(statusUrl);
+
+                statusResponse = _httpClient.Send(statusMsg);
+                statusResp = statusResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                statusDyn = JsonConvert.DeserializeObject<dynamic>(statusResp);
+            }
+
+            sw.Stop();
+            Console.WriteLine($"Time taken: {sw.ElapsedMilliseconds} Milliseconds");
+            JArray outputs = statusDyn["output"];
+            foreach (JValue output in outputs)
+            {
+                Console.WriteLine(output.ToString());
+            }
+        }
+    }
+}
+```
 ## Services Supported
 At the moment, the following services are supported
 | Service | Sync Operation | Async Operation |
