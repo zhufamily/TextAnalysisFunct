@@ -84,6 +84,7 @@ namespace TextAnalysisFunct
 
             if (param.Method.ToLower() == "languagedetection")
             {
+                // only support sync operation
                 if (param.IsAsync)
                 {
                     throw new ArgumentException($"Language detection only supports in sync mode");
@@ -147,6 +148,7 @@ namespace TextAnalysisFunct
             }
             else if (param.Method.ToLower() == "extractivesummarization" || param.Method.ToLower() == "abstractivesummarization")
             {
+                // only support async operation
                 if (!param.IsAsync)
                 {
                     throw new ArgumentException($"Summarization only supports in async mode");
@@ -194,6 +196,7 @@ namespace TextAnalysisFunct
             }
             else if (param.Method.ToLower() == "translation")
             {
+                // only support sync operation
                 if (param.IsAsync)
                 {
                     throw new ArgumentException($"Translation only supports in sync mode");
@@ -220,6 +223,7 @@ namespace TextAnalysisFunct
             }
             else if (param.Method.ToLower() == "translationforlanguagedetection")
             {
+                // only support sync operation
                 if (param.IsAsync)
                 {
                     throw new ArgumentException($"Translation for Language Detection only supports in sync mode");
@@ -315,27 +319,77 @@ namespace TextAnalysisFunct
         [FunctionName("TextAnalysis_KeyPhraseExtractionActivity")]
         public static async Task<List<string>> KeyPhraseExtraction([ActivityTrigger] DurableParam param, ILogger log)
         {
-            HttpRequestMessage msg = new HttpRequestMessage();
-            msg.Method = HttpMethod.Post;
-            msg.RequestUri = new Uri(param.Url);
-            msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
-            //msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
-
-            StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
-            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-            msg.Content = content;
-
-            HttpResponseMessage response = _httpClient.Send(msg);
-            string resp = await response.Content.ReadAsStringAsync();
-            dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
-
-            JArray parases = respObj["results"]["documents"][0]["keyPhrases"];
-            List<string> anaOutputs = new List<string>();
-            foreach (JToken phrase in parases)
+            if (param.IsAsync)
             {
-                anaOutputs.Add((string)phrase);
+                HttpRequestMessage msg = new HttpRequestMessage();
+                msg.Method = HttpMethod.Post;
+                msg.RequestUri = new Uri(param.Url);
+                msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+                //msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
+
+                StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
+                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                msg.Content = content;
+
+                HttpResponseMessage response = _httpClient.Send(msg);
+                string location = response.Headers.GetValues("Operation-Location").FirstOrDefault();
+
+                msg = new HttpRequestMessage();
+                msg.Method = HttpMethod.Get;
+                msg.RequestUri = new Uri(location);
+                msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+
+                HttpResponseMessage response2 = _httpClient.Send(msg);
+                string resp = await response2.Content.ReadAsStringAsync();
+                dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+                string processStatus = (string)respObj["status"];
+
+                while (processStatus == "running" || processStatus == "notStarted")
+                {
+                    Thread.Sleep(TimeSpan.FromMilliseconds(1000));
+                    msg = new HttpRequestMessage();
+                    msg.Method = HttpMethod.Get;
+                    msg.RequestUri = new Uri(location);
+                    msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+
+                    response2 = _httpClient.Send(msg);
+                    resp = await response2.Content.ReadAsStringAsync();
+                    respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+                    processStatus = (string)respObj["status"];
+                }
+
+                JArray parases = respObj["tasks"]["items"][0]["results"]["documents"][0]["keyPhrases"];
+                List<string> anaOutputs = new List<string>();
+                foreach (JToken phrase in parases)
+                {
+                    anaOutputs.Add((string)phrase);
+                }
+                return anaOutputs;
             }
-            return anaOutputs;
+            else
+            {
+                HttpRequestMessage msg = new HttpRequestMessage();
+                msg.Method = HttpMethod.Post;
+                msg.RequestUri = new Uri(param.Url);
+                msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+                //msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
+
+                StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
+                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                msg.Content = content;
+
+                HttpResponseMessage response = _httpClient.Send(msg);
+                string resp = await response.Content.ReadAsStringAsync();
+                dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+
+                JArray parases = respObj["results"]["documents"][0]["keyPhrases"];
+                List<string> anaOutputs = new List<string>();
+                foreach (JToken phrase in parases)
+                {
+                    anaOutputs.Add((string)phrase);
+                }
+                return anaOutputs;
+            }
         }
 
         /// <summary>
@@ -347,27 +401,77 @@ namespace TextAnalysisFunct
         [FunctionName("TextAnalysis_EntityRecognitionActivity")]
         public static async Task<List<string>> EntityRecognition([ActivityTrigger] DurableParam param, ILogger log)
         {
-            HttpRequestMessage msg = new HttpRequestMessage();
-            msg.Method = HttpMethod.Post;
-            msg.RequestUri = new Uri(param.Url);
-            msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
-            //msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
-
-            StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
-            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-            msg.Content = content;
-
-            HttpResponseMessage response = _httpClient.Send(msg);
-            string resp = await response.Content.ReadAsStringAsync();
-            dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
-
-            JArray entities = respObj["results"]["documents"][0]["entities"];
-            List<string> anaOutputs = new List<string>();
-            foreach (JToken entity in entities)
+            if (param.IsAsync)
             {
-                anaOutputs.Add((string)entity["category"] + ":" + (string)entity["text"]);
+                HttpRequestMessage msg = new HttpRequestMessage();
+                msg.Method = HttpMethod.Post;
+                msg.RequestUri = new Uri(param.Url);
+                msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+                //msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
+
+                StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
+                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                msg.Content = content;
+
+                HttpResponseMessage response = _httpClient.Send(msg);
+                string location = response.Headers.GetValues("Operation-Location").FirstOrDefault();
+
+                msg = new HttpRequestMessage();
+                msg.Method = HttpMethod.Get;
+                msg.RequestUri = new Uri(location);
+                msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+
+                HttpResponseMessage response2 = _httpClient.Send(msg);
+                string resp = await response2.Content.ReadAsStringAsync();
+                dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+                string processStatus = (string)respObj["status"];
+
+                while (processStatus == "running" || processStatus == "notStarted")
+                {
+                    Thread.Sleep(TimeSpan.FromMilliseconds(1000));
+                    msg = new HttpRequestMessage();
+                    msg.Method = HttpMethod.Get;
+                    msg.RequestUri = new Uri(location);
+                    msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+
+                    response2 = _httpClient.Send(msg);
+                    resp = await response2.Content.ReadAsStringAsync();
+                    respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+                    processStatus = (string)respObj["status"];
+                }
+
+                JArray entities = respObj["tasks"]["items"][0]["results"]["documents"][0]["entities"];
+                List<string> anaOutputs = new List<string>();
+                foreach (JToken entity in entities)
+                {
+                    anaOutputs.Add((string)entity["category"] + ":" + (string)entity["text"]);
+                }
+                return anaOutputs;
             }
-            return anaOutputs;
+            else
+            {
+                HttpRequestMessage msg = new HttpRequestMessage();
+                msg.Method = HttpMethod.Post;
+                msg.RequestUri = new Uri(param.Url);
+                msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+                //msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
+
+                StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
+                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                msg.Content = content;
+
+                HttpResponseMessage response = _httpClient.Send(msg);
+                string resp = await response.Content.ReadAsStringAsync();
+                dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+
+                JArray entities = respObj["results"]["documents"][0]["entities"];
+                List<string> anaOutputs = new List<string>();
+                foreach (JToken entity in entities)
+                {
+                    anaOutputs.Add((string)entity["category"] + ":" + (string)entity["text"]);
+                }
+                return anaOutputs;
+            }
         }
 
         /// <summary>
@@ -465,31 +569,85 @@ namespace TextAnalysisFunct
         [FunctionName("TextAnalysis_PiiEntityRecognitionActivity")]
         public static async Task<PiiReturnParam> PiiEntityRecognition([ActivityTrigger] DurableParam param, ILogger log)
         {
-            HttpRequestMessage msg = new HttpRequestMessage();
-            msg.Method = HttpMethod.Post;
-            msg.RequestUri = new Uri(param.Url);
-            msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
-            //msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
-
-            StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
-            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-            msg.Content = content;
-
-            HttpResponseMessage response = _httpClient.Send(msg);
-            string resp = await response.Content.ReadAsStringAsync();
-            dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
-
-            PiiReturnParam piiParam = new PiiReturnParam();
-            JObject doc1 = respObj["results"]["documents"][0];
-            piiParam.RedactedText = (string) doc1["redactedText"];
-            List<string> anaOutputs = new List<string>();
-            foreach (JObject entity in ((JArray)doc1["entities"]))
+            if (param.IsAsync)
             {
-                anaOutputs.Add((string)entity["category"] + ":" + (string)entity["text"]);
+                HttpRequestMessage msg = new HttpRequestMessage();
+                msg.Method = HttpMethod.Post;
+                msg.RequestUri = new Uri(param.Url);
+                msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+                //msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
+
+                StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
+                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                msg.Content = content;
+
+                HttpResponseMessage response = _httpClient.Send(msg);
+                string location = response.Headers.GetValues("Operation-Location").FirstOrDefault();
+
+                msg = new HttpRequestMessage();
+                msg.Method = HttpMethod.Get;
+                msg.RequestUri = new Uri(location);
+                msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+
+                HttpResponseMessage response2 = _httpClient.Send(msg);
+                string resp = await response2.Content.ReadAsStringAsync();
+                dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+                string processStatus = (string)respObj["status"];
+
+                while (processStatus == "running" || processStatus == "notStarted")
+                {
+                    Thread.Sleep(TimeSpan.FromMilliseconds(1000));
+                    msg = new HttpRequestMessage();
+                    msg.Method = HttpMethod.Get;
+                    msg.RequestUri = new Uri(location);
+                    msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+
+                    response2 = _httpClient.Send(msg);
+                    resp = await response2.Content.ReadAsStringAsync();
+                    respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+                    processStatus = (string)respObj["status"];
+                }
+
+                PiiReturnParam piiParam = new PiiReturnParam();
+                JObject doc1 = respObj["tasks"]["items"][0]["results"]["documents"][0];
+                piiParam.RedactedText = (string)doc1["redactedText"];
+                List<string> anaOutputs = new List<string>();
+                foreach (JObject entity in ((JArray)doc1["entities"]))
+                {
+                    anaOutputs.Add((string)entity["category"] + ":" + (string)entity["text"]);
+                }
+                piiParam.RedactedEntities = anaOutputs;
+                // log.LogInformation($"Redacted Text\n{piiParam.RedactedText}");
+                return piiParam;
             }
-            piiParam.RedactedEntities = anaOutputs;
-            // log.LogInformation($"Redacted Text\n{piiParam.RedactedText}");
-            return piiParam;
+            else
+            {
+                HttpRequestMessage msg = new HttpRequestMessage();
+                msg.Method = HttpMethod.Post;
+                msg.RequestUri = new Uri(param.Url);
+                msg.Headers.Add("Ocp-Apim-Subscription-Key", param.Key);
+                //msg.Headers.Add("Ocp-Apim-Subscription-Region", param.Region);
+
+                StringContent content = new StringContent(param.JsonBody, Encoding.UTF8, "application/json");
+                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                msg.Content = content;
+
+                HttpResponseMessage response = _httpClient.Send(msg);
+                string resp = await response.Content.ReadAsStringAsync();
+                dynamic respObj = JsonConvert.DeserializeObject<dynamic>(resp);
+
+                PiiReturnParam piiParam = new PiiReturnParam();
+                JObject doc1 = respObj["results"]["documents"][0];
+                piiParam.RedactedText = (string)doc1["redactedText"];
+                List<string> anaOutputs = new List<string>();
+                foreach (JObject entity in ((JArray)doc1["entities"]))
+                {
+                    anaOutputs.Add((string)entity["category"] + ":" + (string)entity["text"]);
+                }
+                piiParam.RedactedEntities = anaOutputs;
+                // log.LogInformation($"Redacted Text\n{piiParam.RedactedText}");
+                return piiParam;
+            }
         }
 
         /// <summary>
