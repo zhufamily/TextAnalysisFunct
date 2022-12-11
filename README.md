@@ -20,19 +20,16 @@ To create a test console application
     - Ocp-Apim-Subscription-Region (required)
     - Ocp-Apim-Subscription-Url (required)
     - Ocp-Apim-Subscription-Method (required)
-    - Ocp-Apim-Subscription-Chunk-Size (optional - default: 5,000)
+    - Ocp-Apim-Subscription-Chunk-Size (optional - default: 5,000 for sync operation 120,000 for async operation)
     - Ocp-Apim-Subscription-Splitors (optional - character return and line feed are always there)
+    - Ocp-Apim-Subscription-Is-Async (optional - default: false)
 3. hash out a json body with a long string variable
 4. point to Azure Durable Function entry point
 5. constantly query Azure Status Uri
 6. when complete, read results
 ### Sample Test Codes 
-The following test codes are getting extractive summariztion from a long text file.\
-Based my test, aroung 15K characters take about one minute to fihish.\
 If you want to detect multiple langauges, you might want to specify a smaller chunk size; due to the fact that one chunk can only return one major language, e.g. English is 51% and Japanense is 49%, the service will only return one value for English.\
 If your test has some chunking issues with paragraph only, e.g. 5,000 characters without \r\n, you might want to specify extra delimitors.  Based on HTTP Header protocol, if multiple delimitors are defined, please separate them by ",", e.g. "!,?,.".\
-As of writing, the Substrative Summarization is still a gated preview, so you will need submit [a request form](https://aka.ms/applyforgatedsummarizationfeatures) for access.\
-The Extractive Summarization seems only work in 2022-10-01-preview version with async operation.\
 When translation service is invoke, the chunk size will set up to 50K characters by system, your custom delimitors are still applied.
 ```
 using System.Net.Http.Headers;
@@ -119,15 +116,17 @@ namespace Tester
     }
 }
 ```
-Another sample for translation service
+Another sample for summarization service with async operation.\
+The following test codes are getting extractive summariztion from a long text file.\
+Based my test, aroung 15K characters take about one minute to fihish. Compared with other services, Summarization is particular show, for example, Entity Linking can finish 750K charcaters in around 40 seconds.
+As of writing, the Substrative Summarization is still a gated preview, so you will need submit [a request form](https://aka.ms/applyforgatedsummarizationfeatures) for access.\
+The Extractive Summarization seems only work in 2022-10-01-preview version with async operation.\
 ```
-
-using System.Net.Http.Headers;
-using System.Text;
-using System;
-using System.Text.Json.Serialization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System.Diagnostics;
+using System.Net.Http.Headers;
+using System.Text;
 
 namespace Tester
 {
@@ -136,9 +135,8 @@ namespace Tester
         static HttpClient _httpClient = new HttpClient();
         static void Main(string[] args)
         {
-            string longtxt = File.ReadAllText("somelongtextfile.txt");
-            
-            
+            string longtxt = File.ReadAllText("news_text.txt");
+
             HttpRequestMessage msg = new HttpRequestMessage();
             msg.Method = HttpMethod.Post;
             msg.RequestUri = new Uri("https://yourazuredureablefunction.azurewebsites.net/api/TextAnalysis_HttpStart?code=yourfunctionaccesscode");
@@ -147,15 +145,30 @@ namespace Tester
             msg.Headers.Add("Ocp-Apim-Subscription-Url", "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&to=en");
             msg.Headers.Add("Ocp-Apim-Subscription-Method", "Translation");
             
-            object data = new object[] 
-            { 
-                new { Text = longtxt }
+            object data = new
+            {
+                displayName = "Document Summarization Task Example",
+                analysisInput = new
+                {
+                    documents = new[] { new { id = 1, language = "en", text = longtxt } }
+                },
+                tasks = new[]
+                {
+                    new
+                    {
+                        kind = "ExtractiveSummarization",
+                        taskName = "Document Summarization Task",
+                        parameters = new { sentenceCount = 3 }
+                    }
+                }
             };
 
             StringContent content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
             content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
             msg.Content = content;
 
+            Stopwatch sw = new Stopwatch();
+            sw.Start();
             HttpResponseMessage response = _httpClient.Send(msg);
             string resp = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
             dynamic durableDyn = JsonConvert.DeserializeObject<dynamic>(resp);
@@ -171,8 +184,8 @@ namespace Tester
             dynamic statusDyn = JsonConvert.DeserializeObject<dynamic>(statusResp);
 
             while (statusDyn["runtimeStatus"] != "Completed")
-            { 
-                Thread.Sleep(TimeSpan.FromSeconds(10));
+            {
+                Thread.Sleep(TimeSpan.FromMilliseconds(1000));
 
                 statusMsg = new HttpRequestMessage();
                 statusMsg.Method = HttpMethod.Get;
@@ -183,9 +196,11 @@ namespace Tester
                 statusDyn = JsonConvert.DeserializeObject<dynamic>(statusResp);
             }
 
+            sw.Stop();
+            Console.WriteLine($"Time taken: {sw.ElapsedMilliseconds} Milliseconds");
             JArray outputs = statusDyn["output"];
             foreach (JValue output in outputs)
-            { 
+            {
                 Console.WriteLine(output.ToString());
             }
         }
@@ -194,12 +209,14 @@ namespace Tester
 ```
 ## Services Supported
 At the moment, the following services are supported
-- Language detect
-- Key phrase extraction
-- Entity extraction
-- PII redaction
-- Summarization (extractive / substractive)
-- Translation
-- Entity Linking
+| Service | Sync Operation | Async Operation |
+| :- | :-: | :-: |
+| Language detect | X | |
+| Key phrase extraction | X | |
+| Entity extraction | X | |
+| PII redaction | X | |
+| Summarization | | X |
+| Translation | X | |
+| Entity Linking | X | X |
 ## License
 Free software, absoltely no warranty, use at your own risk!
