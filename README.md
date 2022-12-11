@@ -207,7 +207,7 @@ namespace Tester
     }
 }
 ```
-Finally, a sample code for Translation Language Detection service
+Finally, a sample code for Translation Language Detection service, which in theory works for detecting multiple languages.
 ```
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
