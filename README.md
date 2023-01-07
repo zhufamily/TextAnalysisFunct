@@ -1,7 +1,11 @@
 # Azure Durable Function for Text Analysis
 ## A Simple Azure Durable Function Wrapper for Azure Text Analysis
 For [Azure Cognitive Text Analysis services](https://azure.microsoft.com/en-us/products/cognitive-services/text-analytics/#overview), there is a limitation for 5,120 characters.  With this restriction, Text Analysis Services are hardly useful for anything longer than a couple of pages.  This wrapper, based on Azure Durable Function, gets rid of this obstacle by converting Text Analysis into async services.\
-For the 2022-10-01-preview version, Cognitive Service supports async operations for a limit of 125,000 characters; I am still exploring that option, will spend some time to shift our call to async version when it becomes GA.  In that case, we can have far fewer transactions, therefore it will be way lower in cost!
+For the 2022-10-01-preview version, Cognitive Service supports async operations for a limit of 125,000 characters; most of the available async operations have been implemented now.  Therefore, we can have far fewer transactions, therefore it will be way lower in cost!\
+Another common challeng is how to deal with multiple languages in Translator services, there is a rather straight-forward approach, not involving chunking into lines or sentences.  It involves two steps.
+1. Use language detect to include all alternatives for minor languages.
+2. Loop through all languages, regardless of major or minor languages, and specify "from" language parameter.
+I will spend some time to have this implemented shortly.
 ## Description of Technical Approach
 At the core of the Azure Durable Function, 
 1. a piece of long text is chopped into multiple small chunks by parapragh(s) and delimitors you selected
@@ -207,7 +211,7 @@ namespace Tester
     }
 }
 ```
-Finally, a sample code for Translation Language Detection service
+Finally, a sample code for Translation Language Detection service, which in theory works for detecting multiple languages.
 ```
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -279,13 +283,13 @@ namespace Tester
 }
 ```
 ## Services Supported
-At the moment, the following services are supported
+At the moment, the following services are supported, async operation is tested for 2022-10-01-preview version
 | Service | Sync Operation | Async Operation |
 | :- | :-: | :-: |
-| Language detect | X | |
-| Key phrase extraction | X | |
-| Entity extraction | X | |
-| PII redaction | X | |
+| Language Detect | X | |
+| Key Phrase Extraction | X | X |
+| Entity Extraction | X | X |
+| PII Redaction | X | X |
 | Summarization | | X |
 | Entity Linking | X | X |
 | Translation | X | |
