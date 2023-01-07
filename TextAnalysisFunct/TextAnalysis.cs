@@ -762,6 +762,14 @@ namespace TextAnalysisFunct
             foreach (JObject lang in ((JArray)respObj))
             {
                 anaOutputs.Add((string)lang["language"]);
+                JToken altLangs = lang["alternatives"];
+                if (altLangs != null)
+                {
+                    foreach (JObject minorLang in ((JArray)altLangs))
+                    {
+                        anaOutputs.Add((string)minorLang["language"]);
+                    }
+                }
             }
             return anaOutputs;
         }
