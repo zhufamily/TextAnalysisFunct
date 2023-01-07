@@ -2,7 +2,7 @@
 ## A Simple Azure Durable Function Wrapper for Azure Text Analysis
 For [Azure Cognitive Text Analysis services](https://azure.microsoft.com/en-us/products/cognitive-services/text-analytics/#overview), there is a limitation for 5,120 characters.  With this restriction, Text Analysis Services are hardly useful for anything longer than a couple of pages.  This wrapper, based on Azure Durable Function, gets rid of this obstacle by converting Text Analysis into async services.\
 For the 2022-10-01-preview version, Cognitive Service supports async operations for a limit of 125,000 characters; most of the available async operations have been implemented now.  Therefore, we can have far fewer transactions, therefore it will be way lower in cost!\
-Another common challeng is how to deal with multiple languages, there is a rather straight-forward approach, not involving chunking into lines or sentences.  It involves two steps.
+Another common challeng is how to deal with multiple languages in Translator services, there is a rather straight-forward approach, not involving chunking into lines or sentences.  It involves two steps.
 1. Use language detect to include all alternatives for minor languages.
 2. Loop through all languages, regardless of major or minor languages, and specify "from" language parameter.
 I will spend some time to have this implemented shortly.
